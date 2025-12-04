@@ -12,29 +12,25 @@ jobs:
     env:
       DEBIAN_FRONTEND: noninteractive
       KERNEL_NAME: "BoltX-SukiSUxSF-V1"
+      # Tetapkan path toolchain agar bisa digunakan di step berikutnya
+      CLANG_PATH: "$(pwd)/toolchain/clang"
 
     steps:
-      # >>> TAMBAHKAN LANGKAH INI DI AWAL <<<
-      - name: Install Git
+      # Langkah 1: Instal semua dependensi yang diperlukan, termasuk yang menyebabkan error
+      - name: Install Dependencies
         run: |
           apt-get update
-          apt-get install -y git
+          apt-get install -y git build-essential bc bison flex libssl-dev libelf-dev \
+          curl python3 python3-pip lld zip unzip libncurses5-dev
 
+      # Langkah 2: Unduh kode sumber dan submodul
       - name: Checkout Source Code
         uses: actions/checkout@v4
         with:
-          # Pastikan repository ini adalah fork atau mirror dari source yang kamu sebutkan
-          # Jika workflow ini ada di repo lain, kamu perlu uncomment baris di bawah:
-          # repository: ramabondanp/android_kernel_common-6.1
           submodules: recursive
           fetch-depth: 1
 
-      - name: Install Dependencies
-        run: |
-          # >>> PERBAIKAN: `apt-get update` dan `git` sudah dijalankan di step sebelumnya, jadi tidak perlu diulang <<<
-          apt-get install -y build-essential bc bison flex libssl-dev curl \
-          python3 python3-pip lld zip unzip libncurses5-dev
-
+      # Langkah 3: Siapkan toolchain Clang
       - name: Setup Toolchain (Clang 19)
         run: |
           mkdir -p toolchain/clang
@@ -42,10 +38,10 @@ jobs:
           echo "Downloading Clang..."
           curl -L "${CLANG_URL}" | tar -xz -C toolchain/clang
           
+      # Langkah 4: Siapkan konfigurasi kernel (defconfig dan kustomisasi)
       - name: Prepare & Configure Kernel
         run: |
-          # Set Path
-          export PATH="$(pwd)/toolchain/clang/bin:$PATH"
+          export PATH="${CLANG_PATH}/bin:$PATH"
           export ARCH=arm64
           export LLVM=1
           
@@ -70,42 +66,56 @@ jobs:
           echo "Enabling SukiSU KPM..."
           scripts/config --file out/.config -e KPM
 
+      # Langkah 5: Build kernel
       - name: Build Kernel Image
         run: |
-          export PATH="$(pwd)/toolchain/clang/bin:$PATH"
+          export PATH="${CLANG_PATH}/bin:$PATH"
           export ARCH=arm64
           export LLVM=1
           
           echo "Starting Build..."
           make -j"$(nproc --all)" O=out Image
 
+      # Langkah 6: (Dianjurkan) Jalankan validasi KMI untuk stabilitas
+      - name: Run KMI Validation
+        run: |
+          # Periksa apakah versi kernel adalah 6.1
+          if grep -q "^VERSION = 6" Makefile && grep -q "^PATCHLEVEL = 1" Makefile; then
+            echo "Running KMI validation for kernel 6.1..."
+            # Pastikan python3 tersedia (sudah diinstall di langkah 1)
+            python3 KMI_function_symbols_test.py
+          else
+            echo "Skipping KMI validation for kernel version != 6.1"
+          fi
+
+      # Langkah 7: Terapkan patch SukiSU
       - name: Apply SukiSU Patch
         run: |
           cd out/arch/arm64/boot
           
           echo "Downloading SukiSU Patcher..."
           curl -LSs "https://github.com/SukiSU-Ultra/SukiSU_patch/raw/refs/heads/main/kpm/patch_linux" -o patch
-          chmod 777 patch
+          chmod +x patch # Lebih aman dari chmod 777
           
           echo "Running Patch..."
-          # Patch binary mengharapkan file 'Image' ada di folder yg sama
           ./patch
           
-          # Patcher outputnya biasanya 'oImage', kita rename balik jadi 'Image'
+          # Patcher seharusnya menghasilkan 'oImage'. Kita rename kembali.
           if [ -f oImage ]; then
             echo "Patch success! Renaming oImage to Image..."
             mv -f oImage Image
           else
-            echo "Warning: oImage not found. Patch might have failed or overwritten Image directly."
+            echo "Warning: oImage not found. The patch might have failed or modified 'Image' directly."
           fi
           
           ls -lh Image
 
+      # Langkah 8: Verifikasi nama kernel di image akhir
       - name: Verify Kernel Name
         run: |
-          # Cek string version di dalam file Image (opsional untuk memastikan nama masuk)
           strings out/arch/arm64/boot/Image | grep "Linux version" | head -n 1
 
+      # Langkah 9: Upload hasil build sebagai artefak
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
