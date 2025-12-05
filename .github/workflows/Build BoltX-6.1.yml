@@ -27,12 +27,12 @@ jobs:
           echo "Cleaning up space to avoid 'No space left on device' error..."
           # Bersihkan cache apt
           apt-get clean
-          # Hapus file yang tidak perlu (dokumentasi, man page)
+          # Hapus file yang tidak perlu (dokumentasi, man page, locale)
           rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/* /usr/share/locale/*
-          # Hapus cache pip (sekarang aman karena pip sudah terinstal)
-          pip cache purge
-          # Hingga cache paket yang tidak perlu
+          # Hapus paket yang tidak diperlukan
           apt-get autoremove -y
+          # Hapus cache pip dengan aman
+          rm -rf ~/.cache/pip || true
           # Tampilkan ruang yang tersedia
           df -h
 
@@ -164,4 +164,4 @@ jobs:
         with:
           name: ${{ env.NAME }}
           path: gki/common/out/arch/arm64/boot/Image
-          compression-level: 9   
+          compression-level: 9
