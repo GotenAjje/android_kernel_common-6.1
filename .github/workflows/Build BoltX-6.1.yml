@@ -14,6 +14,20 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
 
     steps:
+      - name: Clean Up Space
+        run: |
+          echo "Cleaning up space to avoid 'No space left on device' error..."
+          # Bersihkan cache apt
+          apt-get clean
+          # Hapus file yang tidak perlu
+          rm -rf /usr/share/doc/* /usr/share/man/* /usr/share/info/*
+          # Hapus cache pip
+          pip cache purge
+          # Kosongkan log
+          journalctl --vacuum-time=1s || true
+          # Tampilkan ruang yang tersedia
+          df -h
+
       - name: Install Dependencies
         run: |
           apt-get update
@@ -136,7 +150,8 @@ jobs:
           export CROSS_COMPILE_COMPAT=arm-linux-gnueabi-
           
           echo "Starting Build..."
-          make -j"$(nproc --all)" O=out Image
+          # PERBAIKAN: Kurangi jumlah pekerjaan paralel untuk menghemat ruang disk
+          make -j4 O=out Image
 
       - name: Determine Artifact Name
         id: artifact-name
