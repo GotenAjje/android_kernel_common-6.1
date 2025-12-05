@@ -2,16 +2,7 @@ name: Build GKI BoltX-6.1 (KowSU+SUSFS)
 
 on:
   workflow_dispatch:
-    inputs:
-      # Input 'kernel_name' sudah dihapus karena branding sudah otomatis
-      clang_version:
-        description: 'Versi Clang'
-        required: true
-        default: 'r536225 (Clang 19)'
-        type: choice
-        options:
-        - 'r536225 (Clang 19)'
-        - 'r547379 (Clang 20)'
+    # Input 'clang_version' sudah dihapus karena hanya menggunakan Clang 19
 
 jobs:
   build:
@@ -51,18 +42,13 @@ jobs:
           repo init --depth=1 -u https://android.googlesource.com/kernel/manifest -b common-android14-6.1
           repo sync -j$(nproc) --force-sync
 
-      - name: Setup Custom Clang
+      - name: Setup Custom Clang (Fixed to Clang 19)
         working-directory: gki
         run: |
           mkdir -p toolchain/clang
           
-          if [ "${{ github.event.inputs.clang_version }}" == "r536225 (Clang 19)" ]; then
-            echo "Setting up Clang-19 (r536225)..."
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main-kernel-2025/clang-r536225.tar.gz"
-          else
-            echo "Setting up Clang-20 (r547379)..."
-            CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/62cdcefa89e31af2d72c366e8b5ef8db84caea62/clang-r547379.tar.gz"
-          fi
+          echo "Setting up Clang-19 (r536225)..."
+          CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main-kernel-2025/clang-r536225.tar.gz"
           
           echo "Downloading Clang..."
           curl -L "${CLANG_URL}" | tar -xz -C toolchain/clang
@@ -122,6 +108,8 @@ jobs:
           CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_KSU_SUSFS_SUS_KSTAT_SPOOF_GENERIC=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSTAT=y
+          # PERBAIKAN: Tambahkan konfigurasi KPROBES untuk memperbaiki error susfs.c
+          CONFIG_KPROBES=y
           EOF
 
           # --- Logic Nama Kernel (TIDAK LAGI OPSIONAL) ---
